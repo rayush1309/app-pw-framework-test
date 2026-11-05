@@ -1,0 +1,7 @@
+{
+  "code-runner.executorMapByGlob": {
+    "*.spec.ts": "cd \"$workspaceRoot\" && npx playwright test \"$fullFileName\"",
+    "*.test.ts": "cd \"$workspaceRoot\" && npx playwright test \"$fullFileName\""
+  },
+  "code-runner.runInTerminal": true
+}

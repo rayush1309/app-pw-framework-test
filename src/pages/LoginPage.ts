@@ -21,9 +21,10 @@ export class LoginPage  extends BasePage {
 
      }
 
-     //public page actions(method)/behaviour
+     //public page actions(method)/behaviour of the page
      async goToLoginPage() : Promise<void> { 
         await this.page.goto('opencart/index.php?route=account/login');
+        await this.page.waitForTimeout(2000);
      }
 
      async getLoginPageTitle() : Promise<String> {
