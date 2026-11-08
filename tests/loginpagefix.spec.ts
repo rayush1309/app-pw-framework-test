@@ -1,9 +1,10 @@
 
 import {test, expect} from '../src/fixtures/pagefixtures';
+import { CsvHelper } from '../src/utils/CsvHelper';
 
-test.beforeEach(async({loginPage, page}) =>{
+test.beforeEach(async({loginPage}) =>{
     await loginPage.goToLoginPage();
-    await page.waitForTimeout(2000);
+
 
 });
 
@@ -21,9 +22,28 @@ test('forgot pwd link exists test', async({loginPage}) => {
 });
 
 test('user is able to login app test', async({loginPage, homePage}) => {
-    await loginPage.doLogin('pwtestbatch@open.com', 'pw123');
+    await loginPage.doLogin(process.env.USERNAME!, process.env.PASSWORD!);
     //expect pending  
     let result = await homePage.isLogoutLinkExists() ;
     expect.soft(result).toBeTruthy();
     expect.soft(await homePage.getHomePageTitle()).toBe('My Account')
 });
+
+// One test runs all CSV rows sequentially using the testData fixture.
+test('login to test with wrong credentials with data driven test', async ({loginPage, testData}) => {
+    for (const row of testData) {
+        await loginPage.doLogin(row.username, row.password);
+        await expect.poll(() => loginPage.isInavalidLoginErrorMessageVisible()).toBeTruthy();
+    }
+});
+
+// DD_2: Without the testData fixture; read CSV directly and create one test per row.
+// These tests run in parallel because playwright.config.ts has fullyParallel: true.
+const testData = CsvHelper.readCsv('src/data/login.csv');
+
+for (const row of testData) {
+    test(`invalid login test with - ${row.username} - row ${testData.indexOf(row) + 1}`, async ({loginPage}) => {
+        await loginPage.doLogin(row.username, row.password);
+        await expect.poll(() => loginPage.isInavalidLoginErrorMessageVisible()).toBeTruthy();
+    });
+}

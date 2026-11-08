@@ -1,4 +1,11 @@
 {
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1000,
+  "files.autoSaveWhenNoErrors": false,
+  "[typescript]": {
+    "files.autoSave": "afterDelay",
+    "files.autoSaveWhenNoErrors": false
+  },
   "code-runner.executorMapByGlob": {
     "*.spec.ts": "cd \"$workspaceRoot\" && npx playwright test \"$fullFileName\"",
     "*.test.ts": "cd \"$workspaceRoot\" && npx playwright test \"$fullFileName\""

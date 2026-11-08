@@ -33,3 +33,4 @@ test('user is able to login app test', async() => {
     expect.soft(result).toBeTruthy();
     expect.soft(await homePage.getHomePageTitle()).toBe('My Account')
 })
+
