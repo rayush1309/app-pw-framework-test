@@ -1,56 +1,109 @@
 name: Playwright Tests
 
 on:
+  schedule:
+    - cron: '30 16 * * 1-5'  # Monday-Friday, 10 PM IST (16:30 UTC)
+    - cron: '0 19 * * 6'     # Sunday, 12:30 AM IST (Saturday, 19:00 UTC)
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Select environment'
+        required: true
+        default: 'QA'
+        type: choice
+        options:
+          - QA
+          - stage
+          - dev
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: ${{ inputs.environment || 'QA' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
 
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright browser
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
-      - name: Run Playwright tests
+      - name: Install Playwright OS deps only (if cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # Keep reportingLabs run history separate for each environment.
+      - name: Restore reportingLabs history
+        uses: actions/cache/restore@v4
+        with:
+          path: reporting-labs.history.json
+          key: reporting-labs-history-${{ inputs.environment || 'QA' }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: reporting-labs-history-${{ inputs.environment || 'QA' }}-
+
+      - name: Run tests
         run: npx playwright test --project=chromium
         env:
-          ENV: qa
+          # Local environment filenames use lowercase qa.
+          ENV: ${{ inputs.environment == 'QA' && 'qa' || inputs.environment || 'qa' }}
           BASE_URL: ${{ secrets.BASE_URL }}
           USERNAME: ${{ secrets.USERNAME }}
           APPUSERNAME: ${{ secrets.APPUSERNAME || secrets.USERNAME }}
           PASSWORD: ${{ secrets.PASSWORD }}
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
           API_TOKEN: ${{ secrets.API_TOKEN }}
+          OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+          OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+          GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
 
-      - name: Upload HTML report
+      - name: Save reportingLabs history
+        if: ${{ always() && hashFiles('reporting-labs.history.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: reporting-labs.history.json
+          key: reporting-labs-history-${{ inputs.environment || 'QA' }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload HTML Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-html-report
+          name: playwright-html-report-${{ github.run_id }}
           path: reports/html-report/
           retention-days: 30
 
-      - name: Upload Allure results
+      - name: Upload Allure Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results
+          name: allure-results-${{ github.run_id }}
           path: allure-results/
+          retention-days: 30
+
+      - name: Upload reportingLabs Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporting-labs-report-${{ github.run_id }}
+          path: reporting-labs/
           retention-days: 30
