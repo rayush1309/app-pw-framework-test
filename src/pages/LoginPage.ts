@@ -26,7 +26,7 @@ export class LoginPage  extends BasePage {
      //public page actions(method)/behaviour of the page
      async goToLoginPage() : Promise<void> { 
         await this.page.goto('opencart/index.php?route=account/login');
-        await this.page.waitForTimeout(2000);
+        await this.emailId.waitFor({ state: 'visible' });
      }
 
      async getLoginPageTitle() : Promise<String> {
@@ -40,6 +40,9 @@ export class LoginPage  extends BasePage {
      }
 
       async doLogin(username: string, password: string ) : Promise<void> {
+       if (!username || !password) {
+          throw new Error('Login requires a username and password. Check APPUSERNAME and PASSWORD configuration.');
+       }
        await this.emailId.fill(username);
        await this.password.fill(password);
        await this.loginBtn.click();

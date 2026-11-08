@@ -22,11 +22,9 @@ test('forgot pwd link exists test', async({loginPage}) => {
 });
 
 test('user is able to login app test', async({loginPage, homePage}) => {
-    await loginPage.doLogin(process.env.USERNAME!, process.env.PASSWORD!);
-    //expect pending  
-    let result = await homePage.isLogoutLinkExists() ;
-    expect.soft(result).toBeTruthy();
-    expect.soft(await homePage.getHomePageTitle()).toBe('My Account')
+    await loginPage.doLogin(process.env.APPUSERNAME!, process.env.PASSWORD!);
+    await expect.poll(() => homePage.getHomePageTitle()).toBe('My Account');
+    await expect.poll(() => homePage.isLogoutLinkExists()).toBeTruthy();
 });
 
 // One test runs all CSV rows sequentially using the testData fixture.

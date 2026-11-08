@@ -7,8 +7,7 @@ let homePage: HomePage;
 
 test.beforeEach(async({page}) =>{
     loginPage = new LoginPage(page);
-    loginPage.goToLoginPage();
-    await page.waitForTimeout(2000);
+    await loginPage.goToLoginPage();
     homePage = new HomePage(page);
 
 })
@@ -27,10 +26,8 @@ test('forgot pwd link exists test', async() => {
 })
 
 test('user is able to login app test', async() => {
-    await loginPage.doLogin('pwtestbatch@open.com', 'pw123');
-    //expect pending  
-    let result = await homePage.isLogoutLinkExists() ;
-    expect.soft(result).toBeTruthy();
-    expect.soft(await homePage.getHomePageTitle()).toBe('My Account')
+    await loginPage.doLogin(process.env.APPUSERNAME!, process.env.PASSWORD!);
+    await expect.poll(() => homePage.getHomePageTitle()).toBe('My Account');
+    await expect.poll(() => homePage.isLogoutLinkExists()).toBeTruthy();
 })
 
