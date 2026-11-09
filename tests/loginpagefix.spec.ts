@@ -22,7 +22,7 @@ test('forgot pwd link exists test', async({loginPage}) => {
 });
 
 test('user is able to login app test', async({loginPage, homePage}) => {
-    await loginPage.doLogin(process.env.APPUSERNAME!, process.env.PASSWORD!);
+    await loginPage.doSuccessfulLogin(process.env.APPUSERNAME!, process.env.PASSWORD!);
     await expect.poll(() => homePage.getHomePageTitle()).toBe('My Account');
     await expect.poll(() => homePage.isLogoutLinkExists()).toBeTruthy();
 });

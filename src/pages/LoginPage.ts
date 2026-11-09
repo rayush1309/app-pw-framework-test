@@ -1,4 +1,4 @@
-import { Locator, Page } from "@playwright/test";
+import { expect, Locator, Page } from "@playwright/test";
 import { BasePage } from "./BasePage";
 
 export class LoginPage  extends BasePage {
@@ -48,6 +48,19 @@ export class LoginPage  extends BasePage {
 
 
      }
+     async doSuccessfulLogin(username: string, password: string): Promise<void> {
+        await this.doLogin(username, password);
+        try {
+            await expect(this.page).toHaveTitle('My Account');
+        } catch (error) {
+            if (await this.loginErrorMessage.isVisible()) {
+                const message = (await this.loginErrorMessage.innerText()).trim();
+                throw new Error(`Login failed: ${message}. Check APPUSERNAME and PASSWORD for the selected BASE_URL and GitHub environment.`);
+            }
+            throw error;
+        }
+     }
+
      async isInavalidLoginErrorMessageVisible() : Promise<boolean> {
         return await this.loginErrorMessage.isVisible();
 
