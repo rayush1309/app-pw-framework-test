@@ -1,0 +1,360 @@
+name: E2E Tests
+
+# Runs this repository's tests in order, up to the selected environment.
+# dev -> QA -> stage -> Prod. This workflow does not deploy an application.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Run tests up to environment'
+        required: true
+        default: 'QA'
+        type: choice
+        options:
+          - dev
+          - QA
+          - stage
+          - Prod
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate framework
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Check TypeScript
+        run: npx tsc --noEmit
+      - name: Discover tests
+        run: npx playwright test --project=chromium --list
+
+  test-dev:
+    name: dev - Playwright tests
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: dev
+    env:
+      CI: 'true'
+      ENV: dev
+      BASE_URL: ${{ secrets.BASE_URL }}
+      APPUSERNAME: ${{ secrets.APPUSERNAME || secrets.USERNAME }}
+      PASSWORD: ${{ secrets.PASSWORD }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+      OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+      OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+      GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate environment secrets
+        shell: bash
+        run: |
+          for name in BASE_URL APPUSERNAME PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing $name secret for the dev environment."
+              exit 1
+            fi
+          done
+      - name: Install dependencies
+        run: npm ci
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium and OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install OS dependencies for cached Chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      # Run the full suite: this project has no @smoke tags yet.
+      - name: Run Playwright tests
+        run: npx playwright test --project=chromium
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dev-html-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/html-report/
+          retention-days: 30
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dev-allure-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: allure-results/
+          retention-days: 30
+      - name: Upload failure screenshots, videos, and traces
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: dev-test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 30
+
+  test-qa:
+    name: QA - Playwright tests
+    needs: test-dev
+    if: contains(fromJSON('["QA","stage","Prod"]'), inputs.environment)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: QA
+    env:
+      CI: 'true'
+      ENV: qa
+      BASE_URL: ${{ secrets.BASE_URL }}
+      APPUSERNAME: ${{ secrets.APPUSERNAME || secrets.USERNAME }}
+      PASSWORD: ${{ secrets.PASSWORD }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+      OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+      OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+      GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate environment secrets
+        shell: bash
+        run: |
+          for name in BASE_URL APPUSERNAME PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing $name secret for the QA environment."
+              exit 1
+            fi
+          done
+      - name: Install dependencies
+        run: npm ci
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium and OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install OS dependencies for cached Chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      # Run the full suite: this project has no @smoke tags yet.
+      - name: Run Playwright tests
+        run: npx playwright test --project=chromium
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-html-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/html-report/
+          retention-days: 30
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-allure-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: allure-results/
+          retention-days: 30
+      - name: Upload failure screenshots, videos, and traces
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qa-test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 30
+
+  test-stage:
+    name: stage - Playwright tests
+    needs: test-qa
+    if: contains(fromJSON('["stage","Prod"]'), inputs.environment)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: stage
+    env:
+      CI: 'true'
+      ENV: stage
+      BASE_URL: ${{ secrets.BASE_URL }}
+      APPUSERNAME: ${{ secrets.APPUSERNAME || secrets.USERNAME }}
+      PASSWORD: ${{ secrets.PASSWORD }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+      OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+      OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+      GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate environment secrets
+        shell: bash
+        run: |
+          for name in BASE_URL APPUSERNAME PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing $name secret for the stage environment."
+              exit 1
+            fi
+          done
+      - name: Install dependencies
+        run: npm ci
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium and OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install OS dependencies for cached Chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      # Run the full suite: this project has no @smoke tags yet.
+      - name: Run Playwright tests
+        run: npx playwright test --project=chromium
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: stage-html-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/html-report/
+          retention-days: 30
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: stage-allure-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: allure-results/
+          retention-days: 30
+      - name: Upload failure screenshots, videos, and traces
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: stage-test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 30
+
+  test-prod:
+    name: Prod - Playwright tests
+    needs: test-stage
+    if: inputs.environment == 'Prod'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: Prod
+    env:
+      CI: 'true'
+      ENV: prod
+      BASE_URL: ${{ secrets.BASE_URL }}
+      APPUSERNAME: ${{ secrets.APPUSERNAME || secrets.USERNAME }}
+      PASSWORD: ${{ secrets.PASSWORD }}
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+      OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+      OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+      GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Validate environment secrets
+        shell: bash
+        run: |
+          for name in BASE_URL APPUSERNAME PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing $name secret for the Prod environment."
+              exit 1
+            fi
+          done
+      - name: Install dependencies
+        run: npm ci
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - name: Install Chromium and OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install OS dependencies for cached Chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      # Run the full suite: this project has no @smoke tags yet.
+      - name: Run Playwright tests
+        run: npx playwright test --project=chromium
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: prod-html-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/html-report/
+          retention-days: 30
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: prod-allure-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: allure-results/
+          retention-days: 30
+      - name: Upload failure screenshots, videos, and traces
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: prod-test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 30
+
+  summary:
+    name: Pipeline summary
+    needs: [validate, test-dev, test-qa, test-stage, test-prod]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      JOB_RESULTS: ${{ toJSON(needs) }}
+      SELECTED_ENVIRONMENT: ${{ inputs.environment }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Write GitHub run summary
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          results = json.loads(os.environ['JOB_RESULTS'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"## End-to-end test pipeline — up to {os.environ['SELECTED_ENVIRONMENT']}\n\n")
+              summary.write('| Job | Result |\n| --- | --- |\n')
+              for name, job in results.items():
+                  summary.write(f"| {name} | {job['result']} |\n")
+              summary.write(f"\n[View run and download report artifacts]({os.environ['RUN_URL']})\n")
+          PYTHON
